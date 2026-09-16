@@ -25,9 +25,11 @@ name; the name is a label, not a requirement.
 ## 3. Scope
 
 ### In scope
+
 - `[TO BE CONFIRMED]`
 
 ### Explicitly out of scope
+
 - `[TO BE CONFIRMED]`
 
 Anything not listed under "In scope" is out of scope by default.
@@ -47,9 +49,10 @@ requirements downstream.
 
 ## 6. Interfaces
 
-| Direction | Counterparty | Protocol | Status |
-|---|---|---|---|
-| `[TO BE CONFIRMED]` | `[TO BE CONFIRMED]` | `[TO BE CONFIRMED]` | NOT VERIFIED |
+- **Direction:** `[TO BE CONFIRMED]`
+- **Counterparty:** `[TO BE CONFIRMED]`
+- **Protocol:** `[TO BE CONFIRMED]`
+- **Status:** NOT VERIFIED
 
 ## 7. Separation constraints — BINDING
 
@@ -57,11 +60,13 @@ Ukashula and Kilo must remain **fully separate applications**. Shared design
 lineage from YENDRA is permitted; shared application artifacts are not.
 
 ### Permitted
+
 - Reuse of architectural patterns, protocol designs, and specification text
   originating from YENDRA.
 - Independent reimplementation of a YENDRA-derived mechanism.
 
 ### Prohibited
+
 - Adding this module, or Ukashula, as a product flavor of the Kilo build.
   Kilo's Android build defines a `licensee` flavor dimension with
   `kilo` / `inmarsat` / `enterprise` variants (VERIFIED:
@@ -77,6 +82,7 @@ lineage from YENDRA is permitted; shared application artifacts are not.
   constants.
 
 ### Identifiers to be assigned for Ukashula
+
 | Boundary | Kilo (verified) | Ukashula | Status |
 |---|---|---|---|
 | Android applicationId | `com.kilocomms.app` | `[TO BE CONFIRMED]` | OPEN |

@@ -34,3 +34,17 @@ jobs:
         run: |
           echo Add other actions to build,
           echo test, and deploy your project.
+
+  # Runs the GYWH domain test suite. Node 22 strips the TypeScript types;
+  # the domain core has no dependencies, so there is nothing to install.
+  gywh-domain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run GYWH domain tests
+        run: node --experimental-strip-types --test UKC-GROW-YOUR-OWN-HOME/test/*.test.ts

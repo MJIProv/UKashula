@@ -1,6 +1,7 @@
 # GYWH — Grow Your Own Home
 
-Module J of The Heart. Specification only; no code in this repository.
+Module J of The Heart. This directory holds the domain core and its
+tests; the rest of the module lives in The Heart.
 
 Every rule below is cited to a source in the Ukashula corpus. Where a
 decision is open, it is recorded as open — not guessed.

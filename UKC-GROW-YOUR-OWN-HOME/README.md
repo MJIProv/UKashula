@@ -15,7 +15,7 @@ Source: `Ukashula_GYWH_Business_Brief_v3_corrected`
 - **Parent stack:** Next.js 14, Prisma/PostGIS, Fabric ledger
 - **Data model:** `Household 1—1 GYWH-Accrual`
 - **Build phase:** P4 Depth (12–18 months)
-- **State:** specification only; no code in this repository
+- **State:** domain core implemented and tested; not yet wired into The Heart
 
 Sources: Platform App Spec §4.J, §7, §9; Functional Brief §1.
 

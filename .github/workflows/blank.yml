@@ -14,6 +14,10 @@ on:
   workflow_dispatch:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
+# Least privilege: this workflow only reads the repo to run tests.
+permissions:
+  contents: read
+
 jobs:
   # This workflow contains a single job called "build"
   build:
@@ -23,7 +27,9 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Runs a single command using the runners shell
       - name: Run a one-line script
@@ -35,16 +41,19 @@ jobs:
           echo Add other actions to build,
           echo test, and deploy your project.
 
-  # Runs the GYWH domain test suite. Node 22 strips the TypeScript types;
+  # Runs the GYWH domain test suite. Node 24 strips the TypeScript types
+  # natively, so the --experimental-strip-types flag is no longer needed;
   # the domain core has no dependencies, so there is nothing to install.
   gywh-domain:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '22'
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
 
       - name: Run GYWH domain tests
-        run: node --experimental-strip-types --test UKC-GROW-YOUR-OWN-HOME/test/*.test.ts
+        run: node --test UKC-GROW-YOUR-OWN-HOME/test/*.test.ts

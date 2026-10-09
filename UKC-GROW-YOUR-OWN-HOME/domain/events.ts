@@ -88,6 +88,40 @@ export class EventChain {
     return event;
   }
 
+  /**
+   * Take an already-hashed event received from a replica of THIS authority's
+   * chain. `append` cannot be used for that: it would recompute `seq` and
+   * `prevHash` and therefore a different `hash`.
+   *
+   * Returns why it was refused rather than throwing, because a merge walks a
+   * batch and must keep going. Append-only is preserved: nothing here can
+   * rewrite or drop an event that is already held.
+   *
+   *   'applied'      - appended; the chain grew by one
+   *   'duplicate'    - already held at that seq with the same hash (no-op)
+   *   'equivocation' - already held at that seq with a DIFFERENT hash. The
+   *                    authority signed two different events for one slot.
+   *                    Never merged away; the caller must surface it.
+   *   'wrong-authority' / 'out-of-order' / 'bad-hash' - rejected
+   */
+  adopt(
+    event: GywhEvent,
+  ): 'applied' | 'duplicate' | 'equivocation' | 'wrong-authority' | 'out-of-order' | 'bad-hash' {
+    if (event.authorityId !== this.authorityId) return 'wrong-authority';
+
+    const { hash, ...rest } = event;
+    if (hashEvent(rest) !== hash) return 'bad-hash';
+
+    const held = this.#events[event.seq];
+    if (held) return held.hash === event.hash ? 'duplicate' : 'equivocation';
+
+    if (event.seq !== this.#events.length) return 'out-of-order';
+    if (event.prevHash !== this.tipHash) return 'out-of-order';
+
+    this.#events.push(Object.freeze({ ...event }));
+    return 'applied';
+  }
+
   /** Verifies the whole chain, in order, as it was written. */
   verify(): { valid: boolean; brokenAtSeq: number | null } {
     let prev = GENESIS_HASH;
@@ -100,7 +134,19 @@ export class EventChain {
     return { valid: true, brokenAtSeq: null };
   }
 
-  /** R15: daily Merkle root, published to the transparency page. */
+  /**
+   * R15: daily Merkle root, published to the transparency page.
+   *
+   * Leaf order is the chain's own order, and that is deterministic across
+   * replicas: `adopt` only accepts an event at its original `seq` with its
+   * original `prevHash`, so every replica of this authority's chain holds the
+   * same events in the same sequence. No sorting is needed here, and adding
+   * it would change roots already published for no gain.
+   *
+   * Convergence ACROSS authorities is a different problem — a replica's map
+   * of authorities is in discovery order — and is handled in
+   * `GywhLedger.merkleRootFor`, which sorts.
+   */
   merkleRootFor(day: string): string | null {
     let level = this.#events
       .filter((e) => e.at.startsWith(day))

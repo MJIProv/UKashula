@@ -12,6 +12,9 @@ Source: `Ukashula_GYWH_Business_Brief_v3_corrected`
 
 - **Module:** GYWH, Module J of The Heart
 - **Parent app:** The Heart — Community Cultivation Platform
+  (internal name; the app ships to growers as **UKA**. The formal name of
+  the platform and the legal entity remains **Ukashula**. See the naming
+  table in the root `README.md`.)
 - **Parent stack:** Next.js 14, Prisma/PostGIS, Fabric ledger
 - **Data model:** `Household 1—1 GYWH-Accrual`
 - **Build phase:** P4 Depth (12–18 months)

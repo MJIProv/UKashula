@@ -53,6 +53,9 @@ export class HousingAccrual {
     this.householdId = check(params.householdId, 'Gywh:HouseholdRequired');
     this.authorityId = check(params.authorityId, 'Gywh:AuthorityRequired');
     this.growerId = check(params.growerId, 'Gywh:GrowerRequired');
+    if (params.chain && params.chain.authorityId !== this.authorityId) {
+      throw new BusinessError('Gywh:ChainAuthorityMismatch');
+    }
     this.#chain = params.chain ?? new EventChain(this.authorityId);
   }
 
@@ -73,7 +76,7 @@ export class HousingAccrual {
   }
 
   events(): readonly GywhEvent[] {
-    return this.#chain.toArray();
+    return this.#chain.toArray().filter((e) => e.householdId === this.householdId);
   }
 
   verifyLedger(): { valid: boolean; brokenAtSeq: number | null } {

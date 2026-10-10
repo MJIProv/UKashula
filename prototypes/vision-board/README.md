@@ -103,34 +103,54 @@ shows the two concepts were conflated. The constant was
 no unit. Three different quantities (a compressive threshold, a tensile
 threshold, and a dimensionless buffer) were being treated as interchangeable.
 
-## The 7.0 MPa figure — do not cite it
+## The 7.0 MPa figure — corrected 2026-10-10
 
-`assumedCompressiveStrengthMPa: 7.0` was carried over from the original. It is
-marked `[NOT VERIFIED]` in the code and is used **only** as a displayed
-assumption, never as a pass/fail criterion.
+**Two statements in the first version of this document were wrong and are
+withdrawn.** They are recorded here rather than deleted, because this file is
+public and the wrong version has been readable since it was merged.
 
-It is probably wrong by roughly an order of magnitude. Published hemp-lime
-(hempcrete) compressive strength is, to the best of my recollection, on the
-order of 0.2–1.0 MPa — but **that range is itself `[NOT VERIFIED]`: no primary
-source was opened to confirm it.** It is stated here only to flag that the
-number is doubtful, not to replace it with another unsourced number.
+### Withdrawn: "probably wrong by roughly an order of magnitude"
 
-**The domain core already contradicts this figure.** The P8 note above
-`custodyReleaseStatus()` in `UKC-GROW-YOUR-OWN-HOME/domain/housing-accrual.ts`
-states plainly:
+The first version compared `7.0` against a recalled 0.2–1.0 MPa figure for
+hemp-lime and concluded the constant was off by an order of magnitude. That
+comparison was invalid: it measured the figure against a **different material
+state** than the one the figure describes. Internal engineering documentation
+(not published in this repository) specifies a lower baseline figure for the
+uncompacted material and `> 7.0 MPa` as the target for the processed material.
+The two are not the same quantity, so one does not falsify the other.
+
+The order-of-magnitude claim, the 0.2–1.0 MPa comparison, and the instruction
+"do not cite it" are all withdrawn. No replacement number is asserted here.
+
+### Withdrawn: "the domain core already contradicts this figure"
+
+It does not. P8 in `UKC-GROW-YOUR-OWN-HOME/domain/housing-accrual.ts` says:
 
 > P8: the Canonical Data Sheet has no tested strength data for the composite,
 > and the NHBRC / SANS 10400 route is unknown. Until lab data and an
 > engineer's sign-off exist, every custody surface says so.
 
-So the project's own domain layer records that **no tested strength data
-exists**, while the prototype displayed a specific figure to the grower. The
-number was not merely unsourced — it asserted something the domain core
-explicitly says is unknown. That is why defect 6 matters more than the other
-five: the others produce wrong behaviour, this one produced a false claim.
+"No **tested** strength data" is a statement about what has been measured in a
+laboratory. It is not a statement that the figure is unsourced, and it is not a
+contradiction of a design target. The first version conflated *untested* with
+*wrong*.
 
-The correct action is to replace it with a sourced value or remove it, not to
-substitute a different guess.
+### What is still true — and is the actual defect
+
+Defect 6 stands, unchanged, on its original and narrower ground:
+
+- the prototype printed `"Structure verified at > 7.0 MPa"` as a **result**;
+- it computed nothing from the constant — the geometry test was a whitelist of
+  compression-only forms, and no stress calculation took place;
+- **P8 still governs the custody surface.** Until lab data and an engineer's
+  sign-off exist, no screen a grower sees may present any strength figure as
+  verified, whatever its source.
+
+So the figure stays where it now is: a labelled, displayed assumption behind
+`design check only, not certified`, never a pass/fail criterion. The correction
+is to the *reasoning about the number*, not to how the code treats it.
+`[NOT VERIFIED]` remains correct in the code, in its proper sense — no
+laboratory result has been opened for it in this repository.
 
 ## The mass model
 
@@ -138,8 +158,10 @@ substitute a different guess.
 
     rho           = 330 kg/m^3    [NOT VERIFIED — carried from the original,
                                    not checked against the Canonical Data Sheet]
-    safetyMargin  = 0.15          [NOT VERIFIED — no source for 15%]
-                                  dimensionless; a 15% mass buffer, NOT a stress
+    safetyMargin  = 0.15          dimensionless; a 15% mass buffer, NOT a stress
+                                  [CORRECTED 2026-10-10 — a source does exist;
+                                   see "The 0.15 buffer" below. The two forms
+                                   differ by 2.30% and are not reconciled.]
 
 ### `MASS_MODEL = 'bounding_box'` (default — unchanged behaviour)
 
@@ -207,15 +229,45 @@ The seed balance has to move whichever mass model is chosen, or the demo vault
 has to get smaller. That is a Founder/Board call in the same class as the open
 accrual mechanism in `UKC-GROW-YOUR-OWN-HOME/SPEC.md` section 4.
 
+## The 0.15 buffer — corrected 2026-10-10
+
+The first version of this document annotated `safetyMargin = 0.15` as
+`[NOT VERIFIED — no source for 15%]`. **That was wrong: a source exists.**
+Internal engineering documentation (not published in this repository)
+specifies a safety-margin **coefficient of 0.85**, and
+
+    1 − 0.15 = 0.85
+
+so the prototype's 0.15 is the complement of a sourced figure, not an invented
+one. The "no source" annotation is withdrawn.
+
+**But the two are not interchangeable, and this is a real open item.** They are
+applied as different operations:
+
+    the prototype adds a buffer:        M = V × rho × (1 + 0.15)
+                                          = V × rho × 1.150000
+    a 0.85 coefficient divides:         M = V × rho ÷ 0.85
+                                          = V × rho × 1.176471
+
+    discrepancy:  1.176471 ÷ 1.150000 = 1.023018
+                  → the coefficient form is 2.30% more conservative
+
+Both readings are defensible from the number alone. Nothing in this repository
+establishes which operation was intended, so the 2.30% is unresolved. **This is
+a reconciliation question for the engineer, not a sourcing question.**
+
 ## Open decisions (blocking, not code)
 
 1. **`MASS_MODEL`** — `bounding_box` or `shell`, and if `shell`, what wall
    thickness. Changes the economics by ~4.6x.
 2. **`seedGamifiedPointsKg`** — must change regardless; 1,200 kg is unusable.
    Or shrink the demo vault instead.
-3. **The 7.0 MPa figure** — source it, or remove it.
+3. **The 7.0 MPa figure** — `[CORRECTED]` it is sourced in internal
+   engineering documentation. Open item is narrower: obtain lab data and an
+   engineer's sign-off before any custody surface presents it as verified (P8).
 4. **`rho = 330 kg/m^3`** — confirm against the Canonical Data Sheet.
-5. **`safetyMargin = 0.15`** — find a source, or drop the claim that it is 15%.
+5. **`safetyMargin = 0.15`** — `[CORRECTED]` a 0.85 coefficient is sourced.
+   Open item is the 2.30% operator discrepancy above: buffer or divisor.
 
 ## Validation performed
 
@@ -234,13 +286,27 @@ known about it.
 
 - **The component has never run.** Not rendered, not mounted, no Babylon scene
   ever constructed. Typecheck only.
-- `assumedCompressiveStrengthMPa = 7.0` — `[NOT VERIFIED]`, probably wrong by
-  ~an order of magnitude. **Do not cite.**
-- The 0.2–1.0 MPa hempcrete range quoted above as a sanity check is itself
-  `[NOT VERIFIED]` — stated from recollection, no primary source opened.
+- ~~`assumedCompressiveStrengthMPa = 7.0` — probably wrong by ~an order of
+  magnitude, do not cite~~ — **WITHDRAWN 2026-10-10.** The comparison was
+  against a different material state. The figure is sourced in internal
+  engineering documentation not published here. It remains `[NOT VERIFIED]`
+  only in the sense that **no laboratory result has been opened for it**, which
+  is what P8 records. Lab data and an engineer's sign-off are still required
+  before any custody surface may call it verified.
+- ~~The 0.2–1.0 MPa hempcrete range quoted as a sanity check~~ — **WITHDRAWN**:
+  recalled, never sourced, and compared against the wrong material state. It
+  should not have been published.
 - `hempCompositeDensityKgM3 = 330` — `[NOT VERIFIED]`, carried from the
   original, never checked against the Canonical Data Sheet.
-- `safetyMargin = 0.15` — `[NOT VERIFIED]`, no source for 15%.
+- ~~`safetyMargin = 0.15` — no source for 15%~~ — **WITHDRAWN 2026-10-10.** A
+  0.85 coefficient is sourced in internal engineering documentation and
+  1 − 0.15 = 0.85. What is open is the **2.30% operator discrepancy** between
+  the buffer form (×1.150000) and the divisor form (×1.176471) — `[TO BE
+  CONFIRMED]` by the engineer, not a sourcing gap.
+- **The internal engineering documentation behind both figures is not published
+  in this repository**, so neither correction above is independently checkable
+  from this repo alone. Both are `[NOT VERIFIED]` to a reader who has only this
+  repository, and verified only against documents opened privately.
 - Structure dimensions (vault 4 × 4 × 4 m, flat 6 × 0.5 × 4 m, plot 30 × 30 m)
   — `[NOT VERIFIED]`, carried from the original with no design source.
 - Whether `mainUKC` is the correct base branch, and whether `prototypes/` is

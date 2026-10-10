@@ -105,7 +105,8 @@ export const VISION_BOARD_CONFIG = {
   /**
    * Mass buffer, DIMENSIONLESS (0.15 = 15% more material than the bare
    * volume). Not a stress. Not MPa.
-   * [NOT VERIFIED] no source for 15%.
+   * A 0.85 source coefficient is recorded in the README correction.
+   * Whether to multiply by 1.15 or divide by 0.85 remains unresolved (2.30%).
    */
   safetyMargin: 0.15,
 
@@ -153,13 +154,10 @@ export const VISION_BOARD_CONFIG = {
    */
   geometryGate: {
     /**
-     * [NOT VERIFIED] — DO NOT CITE. 7.0 MPa was carried from the original
-     * file. Published hemp-lime (hempcrete) compressive strength is roughly
-     * 0.2-1.0 MPa, so 7.0 MPa is about an order of magnitude high. It is used
-     * here ONLY as a displayed assumption, never as a pass/fail criterion, and
-     * nothing in this file verifies it. A primary source and an engineer's
-     * sign-off are required before this number appears on any grower-facing
-     * surface. See README and `UKC-GROW-YOUR-OWN-HOME/SPEC.md` P8.
+     * Design target, not a laboratory result. The earlier comparison against
+     * uncompacted hemp-lime was withdrawn in README on 2026-10-10.
+     * Used only as a displayed assumption, never a structural pass/fail test.
+     * Lab data and engineer sign-off remain required by P8.
      */
     assumedCompressiveStrengthMPa: 7.0,
     /** Forms the whitelist accepts. Compression-only geometry. */

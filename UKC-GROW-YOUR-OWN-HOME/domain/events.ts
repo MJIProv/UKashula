@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 
 /**
- * R15: a signed, append-only ledger with a daily Merkle root, kept
- * Fabric-compatible.
+ * Hash-chain primitive. Signatures belong to signed-import.ts.
+ * Fabric integration and persistent storage are not provided here.
  *
  * One chain per authority. Rev 2 H6 found the built ledger chains prevHash
  * per authority but verifies per entity, so any entity with interleaved
@@ -30,7 +30,7 @@ export interface GywhEvent {
 
 export const GENESIS_HASH = '0'.repeat(64);
 
-function hashEvent(e: Omit<GywhEvent, 'hash'>): string {
+export function hashEvent(e: Omit<GywhEvent, 'hash'>): string {
   return createHash('sha256')
     .update(
       JSON.stringify([
@@ -80,7 +80,7 @@ export class EventChain {
       authorityId: this.authorityId,
       householdId,
       at,
-      payload: Object.freeze({ ...payload }),
+      payload: immutableJson(payload) as Readonly<Record<string, unknown>>,
       prevHash: this.tipHash,
     };
     const event = Object.freeze({ ...base, hash: hashEvent(base) });
@@ -100,13 +100,16 @@ export class EventChain {
    *   'applied'      - appended; the chain grew by one
    *   'duplicate'    - already held at that seq with the same hash (no-op)
    *   'equivocation' - already held at that seq with a DIFFERENT hash. The
-   *                    authority signed two different events for one slot.
+   *                    chain contains two hash-valid events for one slot.
+   *                    Authorship requires the signed import boundary.
    *                    Never merged away; the caller must surface it.
    *   'wrong-authority' / 'out-of-order' / 'bad-hash' - rejected
    */
   adopt(
     event: GywhEvent,
   ): 'applied' | 'duplicate' | 'equivocation' | 'wrong-authority' | 'out-of-order' | 'bad-hash' {
+    if (!validEvent(event)) return 'bad-hash';
+    event = immutableJson(event) as GywhEvent;
     if (event.authorityId !== this.authorityId) return 'wrong-authority';
 
     const { hash, ...rest } = event;
@@ -135,7 +138,7 @@ export class EventChain {
   }
 
   /**
-   * R15: daily Merkle root, published to the transparency page.
+   * Compute a daily Merkle root; publication is an integration responsibility.
    *
    * Leaf order is the chain's own order, and that is deterministic across
    * replicas: `adopt` only accepts an event at its original `seq` with its
@@ -163,4 +166,34 @@ export class EventChain {
     }
     return level[0];
   }
+}
+
+/** JSON-only detached snapshots. Reject lossy values rather than changing hashes. */
+export function immutableJson(value: unknown, depth = 0): unknown {
+  if (depth > 32) throw new TypeError('Gywh:PayloadTooDeep');
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (Array.isArray(value)) return Object.freeze(Array.from(value, v => immutableJson(v, depth + 1)));
+  if (typeof value !== 'object' || value === null ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
+    throw new TypeError('Gywh:NonJsonPayload');
+  }
+  return Object.freeze(Object.fromEntries(Object.entries(value).map(([k,v]) => [k, immutableJson(v, depth + 1)])));
+}
+
+const EVENT_TYPES = new Set(['AccrualOpted', 'AccrualAccrued', 'AccrualSetOff',
+  'AccrualWithdrawn', 'ThresholdReached', 'BuildAllocated']);
+
+/** Content validation, not an authentication decision. */
+export function validEvent(input: unknown): input is GywhEvent {
+  try {
+    const e = immutableJson(input) as GywhEvent;
+    if (!e || !Number.isSafeInteger(e.seq) || e.seq < 0 || !EVENT_TYPES.has(e.type)) return false;
+    if (typeof e.authorityId !== 'string' || !e.authorityId ||
+        typeof e.householdId !== 'string' || !e.householdId ||
+        typeof e.at !== 'string' || !Number.isFinite(Date.parse(e.at))) return false;
+    if (!e.payload || typeof e.payload !== 'object' || Array.isArray(e.payload)) return false;
+    if (!/^[a-f0-9]{64}$/.test(e.hash) || !/^[a-f0-9]{64}$/.test(e.prevHash)) return false;
+    return hashEvent(e) === e.hash;
+  } catch { return false; }
 }

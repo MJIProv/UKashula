@@ -1,32 +1,12 @@
 import { createHash } from 'node:crypto';
-import { EventChain, type GywhEvent } from './events.ts';
+import { EventChain, immutableJson, validEvent, type GywhEvent } from './events.ts';
 
 /**
- * R15 at replica scale: many authorities, one converging ledger.
- *
- * `EventChain` is deliberately single-writer — its docstring says "One chain
- * per authority", and that is right: a linear hash chain is what makes
- * `verify()` meaningful. But a single chain cannot hold two authorities, and
- * it has no way to take events in from a peer. So an ICP that goes offline,
- * records deliveries, and later meets another device has nowhere to put what
- * it carries.
- *
- * This is that missing layer. It holds one `EventChain` per authority and
- * merges batches of events from any source, in any order, any number of
- * times. Convergence is structural rather than negotiated: the merged state
- * is the union of per-authority chains, so there is no leader, no tie-break
- * and no last-write-wins. Two replicas that have seen the same events are in
- * the same state, whatever order they saw them in.
- *
- * What it does NOT do: it is not a transport. It assumes nothing about how
- * events arrive — Bluetooth, Wi-Fi Direct, USSD, a sync server, a file on a
- * memory card. `merge()` is the whole interface.
- *
- * EQUIVOCATION IS NOT A MERGE CONFLICT. If one authority produces two
- * different events for the same `seq`, that is not disagreement to be
- * resolved — it is provable misbehaviour by a trusted party, and the proof is
- * the pair of signed events. It is recorded and surfaced, never silently
- * resolved. Picking a winner would destroy the only evidence.
+ * In-memory union of non-conflicting, single-writer authority chains.
+ * Raw merge validates hashes, NOT authorship; use signed-import.ts at ingress.
+ * Pending events survive later merge calls, but not process restarts.
+ * Forks retain both candidates and block root publication. There is no automatic
+ * fork resolution, persistence, device transport or business-state replay here.
  */
 
 export interface Equivocation {
@@ -41,15 +21,28 @@ export interface Equivocation {
 export interface MergeResult {
   readonly applied: number;
   readonly duplicate: number;
-  /** Valid but not yet connectable — a gap in the chain. Re-merge later. */
+  /** Valid but not yet connectable, retained in memory across merge calls. */
   readonly deferred: number;
   readonly rejected: number;
+  /** Not retained because the pending limit was reached; sender must retry. */
+  readonly overflow: number;
   readonly equivocations: readonly Equivocation[];
 }
 
 export class GywhLedger {
   readonly #chains = new Map<string, EventChain>();
   readonly #equivocations: Equivocation[] = [];
+
+  readonly #pending = new Map<string, GywhEvent>();
+  readonly #conflictKeys = new Set<string>();
+  readonly #maxPending: number;
+
+  constructor(maxPending = 10_000) {
+    if (!Number.isSafeInteger(maxPending) || maxPending < 0) throw new RangeError('Gywh:InvalidPendingLimit');
+    this.#maxPending = maxPending;
+  }
+
+  pending(): readonly GywhEvent[] { return [...this.#pending.values()]; }
 
   /** Authorities seen, in a stable order so callers can rely on it. */
   authorities(): readonly string[] {
@@ -71,83 +64,52 @@ export class GywhLedger {
     return n;
   }
 
-  /**
-   * Union this ledger with a batch of events. Safe to call repeatedly with
-   * overlapping batches — duplicates are counted, not applied twice.
-   *
-   * Events are applied in `seq` order per authority, and the pass repeats
-   * while progress is being made, so a batch that arrives shuffled still
-   * lands. Anything still unconnectable is reported as `deferred`: it is a
-   * gap, not an error, and a later merge closes it. That is the self-healing
-   * property — a replica never has to receive events in order, or once.
-   */
-  merge(incoming: readonly GywhEvent[]): MergeResult {
-    let applied = 0;
-    let duplicate = 0;
-    let rejected = 0;
+  /** Merge JSON events; report explicit backpressure rather than silently dropping gaps. */
+  merge(incoming: readonly unknown[]): MergeResult {
+    let applied = 0, duplicate = 0, rejected = 0, overflow = 0;
     const equivocations: Equivocation[] = [];
-
-    // Group by authority, then order by seq so the common case is one pass.
-    const byAuthority = new Map<string, GywhEvent[]>();
-    for (const e of incoming) {
-      const list = byAuthority.get(e.authorityId) ?? [];
-      list.push(e);
-      byAuthority.set(e.authorityId, list);
+    const queue = [...this.#pending.values()];
+    this.#pending.clear();
+    const seen = new Set(queue.map(e => e.hash));
+    for (const input of incoming) {
+      let e: GywhEvent;
+      try {
+        const snapshot = immutableJson(input);
+        if (!validEvent(snapshot)) { rejected++; continue; }
+        e = snapshot;
+      } catch { rejected++; continue; }
+      if (seen.has(e.hash)) { duplicate++; continue; }
+      seen.add(e.hash);
+      queue.push(e);
     }
-
-    let pending: GywhEvent[] = [];
-
-    for (const [authorityId, events] of byAuthority) {
-      const chain = this.chainFor(authorityId);
-      let queue = [...events].sort((a, b) => a.seq - b.seq);
-
-      // Repeat while progress is made: closes gaps filled within one batch.
-      for (;;) {
-        const stuck: GywhEvent[] = [];
-        let progressed = false;
-
-        for (const e of queue) {
-          const outcome = chain.adopt(e);
-          switch (outcome) {
-            case 'applied':
-              applied += 1;
-              progressed = true;
-              break;
-            case 'duplicate':
-              duplicate += 1;
-              break;
-            case 'equivocation': {
-              const held = chain.toArray()[e.seq];
-              const eq: Equivocation = { authorityId, seq: e.seq, held, offered: e };
-              equivocations.push(eq);
-              this.#equivocations.push(eq);
-              break;
-            }
-            case 'out-of-order':
-              stuck.push(e);
-              break;
-            default:
-              // 'wrong-authority' cannot happen (grouped by authority);
-              // 'bad-hash' is a corrupt or forged event.
-              rejected += 1;
-              break;
+    // Existing retained gaps are included, so a missing predecessor heals them
+    // without requiring the sender to transmit the tail again.
+    queue.sort((a, b) => a.seq - b.seq);
+    for (const e of queue) {
+      const chain = this.chainFor(e.authorityId);
+      const outcome = chain.adopt(e);
+      switch (outcome) {
+        case 'applied': applied++; break;
+        case 'duplicate': duplicate++; break;
+        case 'equivocation': {
+          const held = chain.toArray()[e.seq];
+          const key = JSON.stringify([e.authorityId, e.seq, ...[held.hash, e.hash].sort()]);
+          if (!this.#conflictKeys.has(key)) {
+            const eq = Object.freeze({ authorityId: e.authorityId, seq: e.seq, held, offered: e });
+            this.#conflictKeys.add(key);
+            this.#equivocations.push(eq);
+            equivocations.push(eq);
           }
+          break;
         }
-
-        queue = stuck;
-        if (!progressed || queue.length === 0) break;
+        case 'out-of-order':
+          if (this.#pending.size < this.#maxPending) this.#pending.set(e.hash, e);
+          else overflow++;
+          break;
+        default: rejected++;
       }
-
-      pending = pending.concat(queue);
     }
-
-    return {
-      applied,
-      duplicate,
-      deferred: pending.length,
-      rejected,
-      equivocations,
-    };
+    return { applied, duplicate, rejected, overflow, deferred: this.#pending.size, equivocations };
   }
 
   /**
@@ -163,6 +125,7 @@ export class GywhLedger {
    * not.
    */
   merkleRootFor(day: string): string | null {
+    if (this.#equivocations.length) throw new Error('Gywh:UnresolvedFork');
     const roots: string[] = [];
     for (const c of this.#chains.values()) {
       const r = c.merkleRootFor(day);
@@ -213,7 +176,7 @@ export class GywhLedger {
     return this.#equivocations.map((e) => Object.freeze({ ...e }));
   }
 
-  /** Everything held, for handing to a peer. */
+  /** Connected chain events only. Persist pending() and equivocations() separately. */
   toArray(): readonly GywhEvent[] {
     const out: GywhEvent[] = [];
     for (const authorityId of this.authorities()) {

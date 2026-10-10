@@ -50,3 +50,8 @@ that a higher source contradicts.
 Source: Specialist Decision & Correction Register Rev 2 §0.
 
 See [`SPEC.md`](./SPEC.md) for binding rules and open decisions.
+
+## Replica integration
+
+See [INTEGRATION.md](INTEGRATION.md) for the signed import boundary, retained
+pending events, fork handling and remaining persistence/device integration gates.

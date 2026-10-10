@@ -132,8 +132,6 @@ test('merge is order-independent even when delivered one event at a time', () =>
     // Worst case: each event arrives alone, out of order. Gaps must heal
     // across separate merge calls, not just within one batch.
     for (const e of shuffled(events, seed)) l.merge([e]);
-    // Re-offer everything; stragglers that were deferred now connect.
-    for (let pass = 0; pass < events.length; pass += 1) l.merge(events);
     assert.equal(l.length, 8, `seed ${seed}`);
     assert.equal(l.merkleRootFor(DAY), reference.merkleRootFor(DAY), `seed ${seed}`);
   }
@@ -169,7 +167,6 @@ test('a gap is deferred, not rejected, and heals on a later merge', () => {
 
   // The missing head turns up later.
   l.merge([events[0], events[1]]);
-  l.merge([events[2], events[3]]);
   assert.equal(l.length, 4);
   assert.equal(l.verify().valid, true);
 });
@@ -179,7 +176,7 @@ test('a gap is deferred, not rejected, and heals on a later merge', () => {
 test('equivocation is detected, never merged away', () => {
   const honest = emit('ICP-A', 2, 1);
 
-  // Same authority, same seq, different content: provable misbehaviour.
+  // Same authority, same seq, different content: a hash-valid fork (authorship is not established here).
   const forked = new EventChain('ICP-A');
   forked.append('AccrualAccrued', honest[0].householdId, honest[0].at, honest[0].payload as Record<string, unknown>);
   const lie = forked.append('AccrualAccrued', 'HH-SOMEONE-ELSE', at(2), { kg: 999_999 });
